@@ -37,8 +37,8 @@ log_info() {
 
 dump_info() {
   log_debug "Search: ${SEARCH}"
-  log_debug "Debug : ${DEBUG}"
-  log_debug "Quiet : ${QUIET}"
+  log_debug "Debug : ${DEBUG:-0}"
+  log_debug "Quiet : ${QUIET:-0}"
   log_debug "Cache dir: ${CACHE_DIR}"
 }
 
