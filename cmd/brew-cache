@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # -*- mode: sh -*-
+# shellcheck disable=SC2155
 
 # BSD 2-Clause License
 #
@@ -16,59 +17,48 @@
 #:      -q                    Make some output more quiet
 #:      -h, --help            Show this message
 
+: "${BASE_NAME:=$(basename "$0")}"
+: "${RDNS_NAME:="com.github.ten0s.${BASE_NAME}"}"
+: "${CACHE_DIR:=""}"
+
 usage() {
     brew cache --help
 }
 
-if [ $# -eq 0 ]; then
-    usage
-    exit 1
-fi
+log_debug() {
+  local msg="$*"
+  [[ ${DEBUG:-0} -eq 1 ]] && printf "%s\n" "${msg}"
+}
 
-BASE_NAME=$(basename $0)
-RDNS_NAME="com.github.ten0s.${BASE_NAME}"
-CACHE_DIR=
-case $(uname -s) in
-    Linux)
-        CACHE_DIR=${XDG_CACHE_HOME-$HOME/.cache}/${RDNS_NAME}
-        ;;
-    Darwin)
-        CACHE_DIR=$HOME/Library/Caches/${RDNS_NAME}
-        ;;
-    *)
-        echo "Error: Unsupported platform"
-        exit 1
-esac
-mkdir -p ${CACHE_DIR}
+log_info() {
+  local msg="$*"
+  [[ ${QUIET:-0} -eq 0 ]] && printf "%s\n" "${msg}"
+}
 
-UPDATE=0
-SEARCH=
-DEBUG=0
-QUIET=0
-while getopts us:dqh OPT; do
-    case "$OPT" in
-        u) UPDATE=1 ;;
-        s) SEARCH="$OPTARG" ;;
-        d) DEBUG=1 ;;
-        q) QUIET=1 ;;
-        h) usage ;;
-    esac
-done
+dump_info() {
+  log_debug "Search: ${SEARCH}"
+  log_debug "Debug : ${DEBUG}"
+  log_debug "Quiet : ${QUIET}"
+  log_debug "Cache dir: ${CACHE_DIR}"
+}
 
-[[ ${DEBUG} -eq 1 ]] && echo "Update: ${UPDATE}"
-[[ ${DEBUG} -eq 1 ]] && echo "Search: ${SEARCH}"
-[[ ${DEBUG} -eq 1 ]] && echo "Debug : ${DEBUG}"
-[[ ${DEBUG} -eq 1 ]] && echo "Quiet : ${QUIET}"
-
-[[ ${DEBUG} -eq 1 ]] && echo "Cache dir: ${CACHE_DIR}"
-CACHE_CURRENT_FILE=${CACHE_DIR}/homebrew-current.cache
+init() {
+  case $(uname -s) in
+    Linux)  CACHE_DIR=${XDG_CACHE_HOME-$HOME/.cache}/${RDNS_NAME} ;;
+    Darwin) CACHE_DIR=$HOME/Library/Caches/${RDNS_NAME} ;;
+    *)      echo "Error: Unsupported platform"; exit 1; ;;
+  esac
+  mkdir -p "${CACHE_DIR}"
+  CACHE_CURRENT_FILE=${CACHE_DIR}/homebrew-current.cache
+}
 
 latest-cache() {
-    brew --config | awk '/Core tap HEAD/ { print $4 }'
+    # Extract the current git HEAD revision
+    sed -rn -- "s/^Core tap HEAD: (.*)$/\1/p" <(brew --config)
 }
 
 current-cache() {
-    [[ -f ${CACHE_CURRENT_FILE} ]] && cat ${CACHE_CURRENT_FILE}
+    [[ -f "${CACHE_CURRENT_FILE}" ]] && cat "${CACHE_CURRENT_FILE}"
 }
 
 cache-file() {
@@ -78,93 +68,90 @@ cache-file() {
 
 cache-exists() {
     if [[ -f ${CACHE_CURRENT_FILE} ]]; then
-        local cache_hash=$(current-cache)
-        [[ -f $(cache-file ${cache_hash}) ]]
+        [[ -f $(cache-file "$(current-cache)") ]]
     else
         return 1
     fi
 }
 
-temp-file() {
-    case $(uname -s) in
-        Darwin)
-            mktemp -t ${BASE_NAME} ;;
-        Linux)
-            mktemp -t ${BASE_NAME}.XXXXXXXXXX ;;
-        *)
-            echo "Error: Unsupported platform"
-            exit 1
-            ;;
-        esac
-}
-
 build-cache() {
     local cache_hash=${1?}
-    [[ ${QUIET} -eq 0 ]] && echo "Building cache: ${cache_hash}"
+    log_info "Building cache: ${cache_hash}"
 
-    TMP=$(temp-file)
-    [[ ${DEBUG} -eq 1 ]] && echo "Temp file: ${TMP}"
+    TMP=$(mktemp -t "${BASE_NAME}.XXXXXXXXXX") && log_debug "Temp file: ${TMP}"
 
     brew list --formula --versions | while read -a pair; do
-        brew list --verbose ${pair[0]} | while read -a file; do
-            echo "${file} ${pair[0]} ${pair[1]}" >> ${TMP}
+        brew list --verbose "${pair[0]}" | while read -a file; do
+            echo "${file} ${pair[0]} ${pair[1]}" >> "${TMP}"
         done
     done
 
     # Remove previous cache file
     local prev_hash=$(current-cache)
-    [[ ! -z ${prev_hash} ]] && rm -f $(cache-file ${prev_hash})
+    [[ -n ${prev_hash} ]] && rm -f "$(cache-file "${prev_hash}")"
 
     # Create cache file
-    mv -f ${TMP} $(cache-file ${cache_hash})
+    mv -f "${TMP}" "$(cache-file "${cache_hash}")"
 
     # Create current cache file
-    echo "${cache_hash}" > ${CACHE_CURRENT_FILE}
+    echo "${cache_hash}" > "${CACHE_CURRENT_FILE}"
 
-    [[ ${QUIET} -eq 0 ]] && echo "Cache: ${cache_hash} is built"
+    log_info "Cache: ${cache_hash} is built"
 }
 
 update-cache() {
     if cache-exists; then
         local current_hash=$(current-cache)
         local latest_hash=$(latest-cache)
-        [[ ${QUIET} -eq 0 ]] && echo "Current cache: ${current_hash}"
-        if [[ ${current_hash} == ${latest_hash} ]]; then
-            [[ ${QUIET} -eq 0 ]] && echo "Cache: ${current_hash} is up-to-date"
+        log_info "Current cache: ${current_hash}"
+        if [[ "${current_hash}" == "${latest_hash}" ]]; then
+            log_info "Cache: ${current_hash} is up-to-date"
         else
-            [[ ${QUIET} -eq 0 ]] && echo "Latest cache: ${latest_hash} is available"
-            build-cache ${latest_hash}
+            log_info "Latest cache: ${latest_hash} is available"
+            build-cache "${latest_hash}"
         fi
     else
         local latest_hash=$(latest-cache)
-        build-cache ${latest_hash}
+        build-cache "${latest_hash}"
     fi
 }
 
 search-cache() {
     local cache_hash=${1?}
-    [[ ${DEBUG} -eq 1 ]] && echo "Searching: ${SEARCH} in cache: ${cache_hash}"
+
+    log_debug "Searching: ${SEARCH} in cache: ${cache_hash}"
     local pattern=
     if [[ ${SEARCH:0:1} == "/" ]] && [[ ${SEARCH:$((${#SEARCH}-1))} == "/" ]]; then
         # Starts with '/' and ends with '/', i.e. regex pattern
         pattern="${SEARCH}"
     else
         # Escape '/' to '\/' and '.' to '\.'
-        local escaped=$(echo ${SEARCH} | sed -e 's#/#\\/#g' -e 's#\.#\\.#g')
+        local escaped=$(echo "${SEARCH}" | sed -e 's#/#\\/#g' -e 's#\.#\\.#g')
         pattern="/.*${escaped}.*/"
     fi
-    awk "\$1 ~ ${pattern} { if (prev != \$2) { prev = \$2; print \$2, \$3 } }" $(cache-file ${cache_hash})
+    awk "\$1 ~ ${pattern} { if (prev != \$2) { prev = \$2; print \$2, \$3 } }" "$(cache-file "${cache_hash}")"
 }
 
-if [[ ${UPDATE} -eq 1 ]]; then
-    update-cache
-fi
+check-and-search-cache() {
+  if [[ ${SEARCH} != "" ]]; then
+      if cache-exists; then
+          search-cache "$(current-cache)"
+      else
+          echo "Error: No cache found. Run 'brew cache -u'"
+          exit 1
+      fi
+  fi
+}
 
-if [[ ${SEARCH} != "" ]]; then
-    if cache-exists; then
-        search-cache $(current-cache)
-    else
-        echo "Error: No cache found. Run 'brew cache -u'"
-        exit 1
-    fi
-fi
+[[ $# -eq 0 ]] && usage || init
+while getopts us:dqh OPT; do
+    case "$OPT" in
+        u) update-cache ;;
+        s) SEARCH="$OPTARG"; check-and-search-cache; ;;
+        d) DEBUG=1; dump_info; ;;
+        q) QUIET=1 ;;
+        h) usage ;;
+        *) log "Unknown option: $OPT"; usage; ;;
+    esac
+done
+
