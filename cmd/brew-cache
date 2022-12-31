@@ -141,7 +141,7 @@ check-and-search-cache() {
   fi
 }
 
-[[ $# -eq 0 ]] && usage || init
+[[ $# -eq 0 ]] && { usage; exit 1; } || init
 while getopts us:dqh OPT; do
     case "$OPT" in
         u) update_cache ;;
@@ -149,7 +149,7 @@ while getopts us:dqh OPT; do
         d) DEBUG=1; dump_info; ;;
         q) QUIET=1 ;;
         h) usage ;;
-        *) log "Unknown option: $OPT"; usage; ;;
+        *) log_info "Unknown option: $OPT"; usage; exit 1; ;;
     esac
 done
 
