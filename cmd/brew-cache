@@ -127,7 +127,7 @@ search_cache() {
         local escaped=$(echo "${SEARCH}" | sed -e 's#/#\\/#g' -e 's#\.#\\.#g')
         pattern="/.*${escaped}.*/"
     fi
-    awk "\$1 ~ ${pattern} { if (prev != \$2) { prev = \$2; print \$2, \$3 } }" "$(cache-file "${new_cache_hash}")"
+    awk "\$1 ~ ${pattern} { if (prev != \$2) { prev = \$2; print \$2, \$3 } }" "$(cache_file "${new_cache_hash}")"
 }
 
 check-and-search-cache() {
