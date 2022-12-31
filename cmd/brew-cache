@@ -52,74 +52,71 @@ init() {
   CACHE_CURRENT_FILE=${CACHE_DIR}/homebrew-current.cache
 }
 
-latest-cache() {
+latest_hash() {
     # Extract the current git HEAD revision
     sed -rn -- "s/^Core tap HEAD: (.*)$/\1/p" <(brew --config)
 }
 
-current-cache() {
+current_hash() {
     [[ -f "${CACHE_CURRENT_FILE}" ]] && cat "${CACHE_CURRENT_FILE}"
 }
 
-cache-file() {
+cache_file() {
     local cache_hash=${1?}
     echo "${CACHE_DIR}/homebrew-${cache_hash}.cache"
 }
 
-cache-exists() {
+cache_exists() {
     if [[ -f ${CACHE_CURRENT_FILE} ]]; then
-        [[ -f $(cache-file "$(current-cache)") ]]
+        [[ -f $(cache_file "$(current_hash)") ]]
     else
         return 1
     fi
 }
 
-build-cache() {
-    local cache_hash=${1?}
-    log_info "Building cache: ${cache_hash}"
+build_cache() {
+    local new_cache_hash=${1?}
+    log_info "Building cache: ${new_cache_hash}"
 
-    TMP=$(mktemp -t "${BASE_NAME}.XXXXXXXXXX") && log_debug "Temp file: ${TMP}"
-
+    # Create cache file
+    NEW_CACHE=$(cache_file "${new_cache_hash}")
     brew list --formula --versions | while read -a pair; do
         brew list --verbose "${pair[0]}" | while read -a file; do
-            echo "${file} ${pair[0]} ${pair[1]}" >> "${TMP}"
+            echo "${file} ${pair[0]} ${pair[1]}" >> "${NEW_CACHE}"
         done
     done
 
     # Remove previous cache file
-    local prev_hash=$(current-cache)
-    [[ -n ${prev_hash} ]] && rm -f "$(cache-file "${prev_hash}")"
+    local prev_hash=$(current_hash)
+    [[ -n ${prev_hash} ]] && rm -f "$(cache_file "${prev_hash}")"
 
-    # Create cache file
-    mv -f "${TMP}" "$(cache-file "${cache_hash}")"
+    # Add hash to current cache file
+    echo "${new_cache_hash}" > "${CACHE_CURRENT_FILE}"
 
-    # Create current cache file
-    echo "${cache_hash}" > "${CACHE_CURRENT_FILE}"
-
-    log_info "Cache: ${cache_hash} is built"
+    log_info "Cache: ${new_cache_hash} is built"
 }
 
-update-cache() {
-    if cache-exists; then
-        local current_hash=$(current-cache)
-        local latest_hash=$(latest-cache)
+update_cache() {
+    local current_hash=$(current_hash)
+    local latest_hash=$(latest_hash)
+
+    if cache_exists; then
         log_info "Current cache: ${current_hash}"
         if [[ "${current_hash}" == "${latest_hash}" ]]; then
             log_info "Cache: ${current_hash} is up-to-date"
         else
             log_info "Latest cache: ${latest_hash} is available"
-            build-cache "${latest_hash}"
+            build_cache "${latest_hash}"
         fi
     else
-        local latest_hash=$(latest-cache)
-        build-cache "${latest_hash}"
+        build_cache "${latest_hash}"
     fi
 }
 
-search-cache() {
-    local cache_hash=${1?}
+search_cache() {
+    local new_cache_hash=${1?}
 
-    log_debug "Searching: ${SEARCH} in cache: ${cache_hash}"
+    log_debug "Searching: ${SEARCH} in cache: ${new_cache_hash}"
     local pattern=
     if [[ ${SEARCH:0:1} == "/" ]] && [[ ${SEARCH:$((${#SEARCH}-1))} == "/" ]]; then
         # Starts with '/' and ends with '/', i.e. regex pattern
@@ -129,13 +126,13 @@ search-cache() {
         local escaped=$(echo "${SEARCH}" | sed -e 's#/#\\/#g' -e 's#\.#\\.#g')
         pattern="/.*${escaped}.*/"
     fi
-    awk "\$1 ~ ${pattern} { if (prev != \$2) { prev = \$2; print \$2, \$3 } }" "$(cache-file "${cache_hash}")"
+    awk "\$1 ~ ${pattern} { if (prev != \$2) { prev = \$2; print \$2, \$3 } }" "$(cache-file "${new_cache_hash}")"
 }
 
 check-and-search-cache() {
   if [[ ${SEARCH} != "" ]]; then
-      if cache-exists; then
-          search-cache "$(current-cache)"
+      if cache_exists; then
+          search_cache "$(current_hash)"
       else
           echo "Error: No cache found. Run 'brew cache -u'"
           exit 1
@@ -146,7 +143,7 @@ check-and-search-cache() {
 [[ $# -eq 0 ]] && usage || init
 while getopts us:dqh OPT; do
     case "$OPT" in
-        u) update-cache ;;
+        u) update_cache ;;
         s) SEARCH="$OPTARG"; check-and-search-cache; ;;
         d) DEBUG=1; dump_info; ;;
         q) QUIET=1 ;;
