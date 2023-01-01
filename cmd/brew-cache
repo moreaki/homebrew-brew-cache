@@ -23,9 +23,17 @@
 : "${CACHE_DIR:=""}"
 : "${LIMIT_TO_PKGS:=""}"
 
+init() {
+  case $(uname -s) in
+    Linux)  CACHE_DIR=${XDG_CACHE_HOME-$HOME/.cache}/${RDNS_NAME} ;;
+    Darwin) CACHE_DIR=$HOME/Library/Caches/${RDNS_NAME} ;;
+    *)      echo "Error: Unsupported platform"; exit 1; ;;
+  esac
+  mkdir -p "${CACHE_DIR}"
+}
+
 usage() {
-    brew cache --help
-    exit 0
+    brew cache --help; exit 0
 }
 
 log_info() {
@@ -40,15 +48,6 @@ log_debug() {
 
 dump_info() {
   log_info "Cache dir: ${CACHE_DIR}"
-}
-
-init() {
-  case $(uname -s) in
-    Linux)  CACHE_DIR=${XDG_CACHE_HOME-$HOME/.cache}/${RDNS_NAME} ;;
-    Darwin) CACHE_DIR=$HOME/Library/Caches/${RDNS_NAME} ;;
-    *)      echo "Error: Unsupported platform"; exit 1; ;;
-  esac
-  mkdir -p "${CACHE_DIR}"
 }
 
 latest_hash() {
@@ -124,7 +123,7 @@ check-and-search-cache() {
   fi
 }
 
-[[ $# -eq 0 ]] && { usage; exit 1; } || init
+[[ $# -eq 0 ]] && usage || init
 while getopts us:diqh OPT; do
     case "$OPT" in
         u) update_cache ;;
@@ -133,7 +132,6 @@ while getopts us:diqh OPT; do
         i) dump_info; ;;
         q) QUIET=1 ;;
         h) usage ;;
-        *) log_info "Unknown option: $OPT"; usage; exit 1; ;;
+        *) log_info "Unknown option: $OPT"; usage; ;;
     esac
 done
-
