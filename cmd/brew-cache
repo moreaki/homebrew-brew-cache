@@ -12,9 +12,10 @@
 #:  Query the local Homebrew packages cache
 #:
 #:      -u                    Update/build the local packages cache
-#:      -s  <[/]pattern[/]>     Search for package(s) that own the file pattern
-#:      -d                    Display any debugging information
-#:      -q                    Make some output more quiet
+#:      -s  <[/]pattern[/]>   Search for package(s) that own the file `pattern`
+#:      -d                    Display debugging information
+#:      -i                    Display cache information
+#:      -q                    Quiesce output
 #:      -h, --help            Show this message
 
 : "${BASE_NAME:=$(basename "$0")}"
@@ -24,23 +25,21 @@
 
 usage() {
     brew cache --help
-}
-
-log_debug() {
-  local msg="$*"
-  [[ ${DEBUG:-0} -eq 1 ]] && printf "%s\n" "${msg}"
+    exit 0
 }
 
 log_info() {
-  local msg="$*"
-  [[ ${QUIET:-0} -eq 0 ]] && printf "%s\n" "${msg}"
+  local msg=${1}
+  local hash="${2:-$(current_hash)}"
+  [[ ${QUIET:-0} -eq 0 ]] && printf "%s %s\n" "[${hash:0:7}]" "${msg}"
+}
+
+log_debug() {
+  [[ ${DEBUG:-0} -eq 1 ]] && log_info "$*"
 }
 
 dump_info() {
-  log_debug "Search   : ${SEARCH}"
-  log_debug "Debug    : ${DEBUG:-0}"
-  log_debug "Quiet    : ${QUIET:-0}"
-  log_debug "Cache dir: ${CACHE_DIR}"
+  log_info "Cache dir: ${CACHE_DIR}"
 }
 
 init() {
@@ -50,16 +49,15 @@ init() {
     *)      echo "Error: Unsupported platform"; exit 1; ;;
   esac
   mkdir -p "${CACHE_DIR}"
-  CACHE_CURRENT_FILE=${CACHE_DIR}/homebrew-current.cache
 }
 
 latest_hash() {
-    # Extract the current git HEAD revision
+    # Extract brew's current git HEAD revision
     sed -rn -- "s/^Core tap HEAD: (.*)$/\1/p" <(brew --config)
 }
 
 current_hash() {
-    [[ -f "${CACHE_CURRENT_FILE}" ]] && cat "${CACHE_CURRENT_FILE}"
+    sed -rn -- "s@(.*)/homebrew-(.*).cache@\2@p" <<<"$(find "${CACHE_DIR}"/homebrew-* -type f 2>/dev/null)"
 }
 
 cache_file() {
@@ -68,16 +66,12 @@ cache_file() {
 }
 
 cache_exists() {
-    if [[ -f ${CACHE_CURRENT_FILE} ]]; then
-        [[ -f $(cache_file "$(current_hash)") ]]
-    else
-        return 1
-    fi
+    [[ -n "$(current_hash)" ]] && return 0 || return 1
 }
 
 build_cache() {
     local new_cache_hash=${1?}
-    log_info "Building cache: ${new_cache_hash}"
+    log_info "Building cache" "${new_cache_hash}"
 
     # Create cache file
     NEW_CACHE=$(cache_file "${new_cache_hash}")
@@ -86,16 +80,13 @@ build_cache() {
         while read -r file; do
             printf "%s:%s:%s\n" "${file}" "${pkg}" "${version}"
         done <<<"$(brew list --verbose "${pkg}")" >> "${NEW_CACHE}"
-    done <<<"$(brew list --formula --versions | grep -E -- "${LIMIT_TO_PKGS}" )"
+    done <<<"$(brew list --formula --versions | grep -E -- "${LIMIT_TO_PKGS}")"
 
     # Remove previous cache file
     local prev_hash=$(current_hash)
     [[ -n ${prev_hash} ]] && rm -f "$(cache_file "${prev_hash}")"
 
-    # Add hash to current cache file
-    echo "${new_cache_hash}" > "${CACHE_CURRENT_FILE}"
-
-    log_info "Cache: ${new_cache_hash} is built"
+    log_info "Cache is built" "${new_cache_hash}"
 }
 
 update_cache() {
@@ -103,23 +94,23 @@ update_cache() {
     local latest_hash=$(latest_hash)
 
     if cache_exists; then
-        log_info "Current cache: ${current_hash}"
         if [[ "${current_hash}" == "${latest_hash}" ]]; then
-            log_info "Cache: ${current_hash} is up-to-date"
+            log_info "Cache is up-to-date"
         else
-            log_info "Latest cache: ${latest_hash} is available"
+            log_info "Updated git hash (${latest_hash:0:7}) is available, update cache"
             build_cache "${latest_hash}"
         fi
     else
+        log_info "No cache is available, building new cache"
         build_cache "${latest_hash}"
     fi
 }
 
 search_cache() {
-    local new_cache_hash=${1?}
+    local cache_hash=${1?}
 
-    log_debug "Searching: \`${SEARCH}\` in cache: ${new_cache_hash}"
-    sed -rn -- "s@(.*)${SEARCH}(.*):(.*):(.*)@\3 \4@p" "$(cache_file "${new_cache_hash}")" | sort -u
+    log_debug "Searching: \`${SEARCH}\` in cache: ${cache_hash}"
+    sed -rn -- "s@(.*)${SEARCH}(.*):(.*):(.*)@\3 \4@p" "$(cache_file "${cache_hash}")" | sort -u
 }
 
 check-and-search-cache() {
@@ -127,18 +118,19 @@ check-and-search-cache() {
       if cache_exists; then
           search_cache "$(current_hash)"
       else
-          echo "Error: No cache found. Run 'brew cache -u'"
+          echo "Error: No cache found. Run \`brew cache -u\`"
           exit 1
       fi
   fi
 }
 
 [[ $# -eq 0 ]] && { usage; exit 1; } || init
-while getopts us:dqh OPT; do
+while getopts us:diqh OPT; do
     case "$OPT" in
         u) update_cache ;;
         s) SEARCH="$OPTARG"; check-and-search-cache; ;;
-        d) DEBUG=1; dump_info; ;;
+        d) DEBUG=1; ;;
+        i) dump_info; ;;
         q) QUIET=1 ;;
         h) usage ;;
         *) log_info "Unknown option: $OPT"; usage; exit 1; ;;
