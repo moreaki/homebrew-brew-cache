@@ -12,7 +12,7 @@
 #:  Query the local Homebrew packages cache
 #:
 #:   -u            Update/build the local packages cache
-#:   -s  <pattern>   Show package(s) owning the file(s) <pattern>
+#:   -s  <pattern>   Show package(s) owning <pattern> files
 #:   -d            Display debugging information
 #:   -i            Display cache information
 #:   -q            Quiesce output
