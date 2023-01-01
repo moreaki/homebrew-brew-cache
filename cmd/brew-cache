@@ -12,7 +12,7 @@
 #:  Query the local Homebrew packages cache
 #:
 #:      -u                Update/build the local packages cache
-#:      -s  `pattern`     Search for package(s) owning the file `pattern`
+#:      -s  pattern       Search for package(s) owning `pattern`
 #:      -d                Display debugging information
 #:      -i                Display cache information
 #:      -q                Quiesce output
