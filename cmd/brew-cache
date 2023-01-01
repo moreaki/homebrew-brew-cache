@@ -20,6 +20,7 @@
 : "${BASE_NAME:=$(basename "$0")}"
 : "${RDNS_NAME:="com.github.ten0s.${BASE_NAME}"}"
 : "${CACHE_DIR:=""}"
+: "${LIMIT_TO_PKGS:="srt|scc"}"
 
 usage() {
     brew cache --help
@@ -83,9 +84,9 @@ build_cache() {
     while read -r pkg version; do
         log_debug "Working on: $pkg $version"
         while read -r file; do
-            printf "%s %s %s\n" "${file}" "${pkg}" "${version}"
+            printf "%s:%s:%s\n" "${file}" "${pkg}" "${version}"
         done <<<"$(brew list --verbose "${pkg}")" >> "${NEW_CACHE}"
-    done <<<"$(brew list --formula --versions | grep -E -- "srt|scc" )"
+    done <<<"$(brew list --formula --versions | grep -E -- "${LIMIT_TO_PKGS}" )"
 
     # Remove previous cache file
     local prev_hash=$(current_hash)
@@ -117,17 +118,8 @@ update_cache() {
 search_cache() {
     local new_cache_hash=${1?}
 
-    log_debug "Searching: ${SEARCH} in cache: ${new_cache_hash}"
-    local pattern=
-    if [[ ${SEARCH:0:1} == "/" ]] && [[ ${SEARCH:$((${#SEARCH}-1))} == "/" ]]; then
-        # Starts with '/' and ends with '/', i.e. regex pattern
-        pattern="${SEARCH}"
-    else
-        # Escape '/' to '\/' and '.' to '\.'
-        local escaped=$(echo "${SEARCH}" | sed -e 's#/#\\/#g' -e 's#\.#\\.#g')
-        pattern="/.*${escaped}.*/"
-    fi
-    awk "\$1 ~ ${pattern} { if (prev != \$2) { prev = \$2; print \$2, \$3 } }" "$(cache_file "${new_cache_hash}")"
+    log_debug "Searching: \`${SEARCH}\` in cache: ${new_cache_hash}"
+    sed -rn -- "s@(.*)${SEARCH}(.*):(.*):(.*)@\3 \4@p" "$(cache_file "${new_cache_hash}")"
 }
 
 check-and-search-cache() {
