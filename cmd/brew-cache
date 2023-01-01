@@ -16,6 +16,7 @@
 #:     -d            Display debugging information
 #:     -i            Display cache information
 #:     -q            Quiesce output
+#:     -r            Remove actual cache
 #:     -h, --help    Show this message
 
 : "${BASE_NAME:=$(basename "$0")}"
@@ -24,12 +25,12 @@
 : "${LIMIT_TO_PKGS:=""}"
 
 init() {
-  case $(uname -s) in
-    Linux)  CACHE_DIR=${XDG_CACHE_HOME-$HOME/.cache}/${RDNS_NAME} ;;
-    Darwin) CACHE_DIR=$HOME/Library/Caches/${RDNS_NAME} ;;
-    *)      echo "Error: Unsupported platform"; exit 1; ;;
-  esac
-  mkdir -p "${CACHE_DIR}"
+    case $(uname -s) in
+      Linux)  CACHE_DIR=${XDG_CACHE_HOME-$HOME/.cache}/${RDNS_NAME} ;;
+      Darwin) CACHE_DIR=$HOME/Library/Caches/${RDNS_NAME} ;;
+      *)      echo "Error: Unsupported platform"; exit 1; ;;
+    esac
+    mkdir -p "${CACHE_DIR}"
 }
 
 usage() {
@@ -38,21 +39,29 @@ usage() {
 }
 
 log_info() {
-  local msg=${1}
-  local hash="${2:-$(current_hash)}"
-  [[ ${QUIET:-0} -eq 0 ]] && printf "%s %s\n" "[${hash:0:7}]" "${msg}"
+    local msg=${1}
+    local hash="${2:-$(current_hash)}"
+    [[ ${QUIET:-0} -eq 0 ]] && printf "%s %s\n" "[${hash:0:7}]" "${msg}"
 }
 
 log_debug() {
-  [[ ${DEBUG:-0} -eq 1 ]] && log_info "$*"
+    [[ ${DEBUG:-0} -eq 1 ]] && log_info "$*"
 }
 
 dump_info() {
-  log_info "Cache dir: ${CACHE_DIR}"
+    local cache_dir="${CACHE_DIR}"
+    local cache_hash="$(current_hash)"
+    local cache_file="$(cache_file "${cache_hash}")"
+    local cache_size=$(wc -l 2>/dev/null < "${cache_file}" | cut -d" " -f3)
+
+    log_info "Cache dir : ${cache_dir}"
+    log_info "Cache hash: ${cache_hash}"
+    log_info "Cache file: ${cache_file:-"not available"}"
+    log_info "Cache size: ${cache_size:-0} entries"
 }
 
 latest_hash() {
-    # Extract brew's current git HEAD revision
+    # Extract homebrew's current git HEAD revision
     sed -rn -- "s/^Core tap HEAD: (.*)$/\1/p" <(brew --config)
 }
 
@@ -62,7 +71,7 @@ current_hash() {
 
 cache_file() {
     local cache_hash=${1?}
-    echo "${CACHE_DIR}/homebrew-${cache_hash}.cache"
+    [[ -n ${cache_hash} ]] && echo "${CACHE_DIR}/homebrew-${cache_hash}.cache" || echo "NA"
 }
 
 cache_exists() {
@@ -71,22 +80,24 @@ cache_exists() {
 
 build_cache() {
     local new_cache_hash=${1?}
-    log_info "Building cache" "${new_cache_hash}"
+    local new_cache=$(cache_file "${new_cache_hash}")
 
-    # Create cache file
-    NEW_CACHE=$(cache_file "${new_cache_hash}")
+    remove_cache "$(current_hash)"
+    log_info "Building cache" "${new_cache_hash}"
     while read -r pkg version; do
         log_debug "Working on: $pkg $version"
         while read -r file; do
             printf "%s:%s:%s\n" "${file}" "${pkg}" "${version}"
-        done <<<"$(brew list --verbose "${pkg}")" >> "${NEW_CACHE}"
+        done <<<"$(brew list --verbose "${pkg}")" >> "${new_cache}"
     done <<<"$(brew list --formula --versions | grep -E -- "${LIMIT_TO_PKGS}")"
 
-    # Remove previous cache file
-    local prev_hash=$(current_hash)
-    [[ -n ${prev_hash} ]] && rm -f "$(cache_file "${prev_hash}")"
+    log_info "New cache is built" "${new_cache_hash}"
+}
 
-    log_info "Cache is built" "${new_cache_hash}"
+remove_cache() {
+    local cache_hash=${1?}
+    log_info "Removing cache with hash ${cache_hash}"
+    \rm -f -- "$(cache_file "${cache_hash}")" 2>/dev/null
 }
 
 update_cache() {
@@ -96,14 +107,14 @@ update_cache() {
     if cache_exists; then
         if [[ "${current_hash}" == "${latest_hash}" ]]; then
             log_info "Cache is up-to-date"
+            return 0
         else
-            log_info "Updated git hash (${latest_hash:0:7}) is available, update cache"
-            build_cache "${latest_hash}"
+            log_info "Updated git hash (${latest_hash:0:7}) is available"
         fi
     else
-        log_info "No cache is available, building new cache"
-        build_cache "${latest_hash}"
+        log_info "No cache is available"
     fi
+    build_cache "${latest_hash}"
 }
 
 search_cache() {
@@ -116,13 +127,14 @@ search_cache() {
 }
 
 [[ $# -eq 0 ]] && usage || init
-while getopts dqihus: OPT; do
+while getopts dqihurs: OPT; do
     case "$OPT" in
         d) DEBUG=1 ;;
         q) QUIET=1 ;;
         i) dump_info; ;;
         h) usage ;;
         u) update_cache ;;
+        r) remove_cache "$(current_hash)";;
         s) SEARCH="$OPTARG" ;;
         *) log_info "Unknown option: $OPT"; usage; ;;
     esac
