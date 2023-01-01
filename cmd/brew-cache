@@ -20,7 +20,7 @@
 : "${BASE_NAME:=$(basename "$0")}"
 : "${RDNS_NAME:="com.github.ten0s.${BASE_NAME}"}"
 : "${CACHE_DIR:=""}"
-: "${LIMIT_TO_PKGS:="srt|scc"}"
+: "${LIMIT_TO_PKGS:=""}"
 
 usage() {
     brew cache --help
