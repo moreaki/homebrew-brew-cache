@@ -119,7 +119,7 @@ search_cache() {
     local new_cache_hash=${1?}
 
     log_debug "Searching: \`${SEARCH}\` in cache: ${new_cache_hash}"
-    sed -rn -- "s@(.*)${SEARCH}(.*):(.*):(.*)@\3 \4@p" "$(cache_file "${new_cache_hash}")"
+    sed -rn -- "s@(.*)${SEARCH}(.*):(.*):(.*)@\3 \4@p" "$(cache_file "${new_cache_hash}")" | sort -u
 }
 
 check-and-search-cache() {
