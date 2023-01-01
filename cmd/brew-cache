@@ -107,16 +107,10 @@ update_cache() {
 }
 
 search_cache() {
-    local cache_hash=${1?}
-
-    log_debug "Searching: \`${SEARCH}\` in cache: ${cache_hash}"
-    sed -rn -- "s@(.*)${SEARCH}(.*):(.*):(.*)@\3 \4@p" "$(cache_file "${cache_hash}")" | sort -u
-}
-
-check-and-search-cache() {
   if [[ ${SEARCH} != "" ]]; then
       if cache_exists; then
-          search_cache "$(current_hash)"
+          log_debug "Searching \`${SEARCH}\` in cache"
+          sed -rn -- "s@(.*)${SEARCH}(.*):(.*):(.*)@\3 \4@p" "$(cache_file "$(current_hash)")" | sort -u
       else
           echo "Error: No cache found. Run \`brew cache -u\`"
           exit 1
@@ -125,14 +119,14 @@ check-and-search-cache() {
 }
 
 [[ $# -eq 0 ]] && usage || init
-while getopts us:diqh OPT; do
+while getopts dqihus: OPT; do
     case "$OPT" in
-        u) update_cache ;;
-        s) SEARCH="$OPTARG"; check-and-search-cache; ;;
-        d) DEBUG=1; ;;
-        i) dump_info; ;;
+        d) DEBUG=1 ;;
         q) QUIET=1 ;;
+        i) dump_info; ;;
         h) usage ;;
+        u) update_cache ;;
+        s) SEARCH="$OPTARG"; search_cache; ;;
         *) log_info "Unknown option: $OPT"; usage; ;;
     esac
 done
