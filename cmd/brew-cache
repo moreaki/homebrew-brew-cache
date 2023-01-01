@@ -107,15 +107,12 @@ update_cache() {
 }
 
 search_cache() {
-  if [[ ${SEARCH} != "" ]]; then
-      if cache_exists; then
-          log_debug "Searching \`${SEARCH}\` in cache"
-          sed -rn -- "s@(.*)${SEARCH}(.*):(.*):(.*)@\3 \4@p" "$(cache_file "$(current_hash)")" | sort -u
-      else
-          echo "Error: No cache found. Run \`brew cache -u\`"
-          exit 1
-      fi
-  fi
+    if cache_exists; then
+        log_debug "Searching \`${SEARCH}\` in cache"
+        sed -rn -- "s@(.*)${SEARCH}(.*):(.*):(.*)@\3 \4@p" "$(cache_file "$(current_hash)")" | sort -u
+    else
+        log_info "Error: No cache found. Run \`brew cache -u\`"; exit 1
+    fi
 }
 
 [[ $# -eq 0 ]] && usage || init
@@ -126,7 +123,9 @@ while getopts dqihus: OPT; do
         i) dump_info; ;;
         h) usage ;;
         u) update_cache ;;
-        s) SEARCH="$OPTARG"; search_cache; ;;
+        s) SEARCH="$OPTARG" ;;
         *) log_info "Unknown option: $OPT"; usage; ;;
     esac
 done
+
+[[ ${SEARCH} != "" ]] && search_cache
