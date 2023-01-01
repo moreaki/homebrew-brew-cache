@@ -11,12 +11,12 @@
 #:
 #:  Query the local Homebrew packages cache
 #:
-#:      -u                    Update/build the local packages cache
-#:      -s  <[/]pattern[/]>   Search for package(s) that own the file `pattern`
-#:      -d                    Display debugging information
-#:      -i                    Display cache information
-#:      -q                    Quiesce output
-#:      -h, --help            Show this message
+#:      -u              Update/build the local packages cache
+#:      -s  <pattern>   Search for package(s) owning the file `pattern`
+#:      -d              Display debugging information
+#:      -i              Display cache information
+#:      -q              Quiesce output
+#:      -h, --help      Show this message
 
 : "${BASE_NAME:=$(basename "$0")}"
 : "${RDNS_NAME:="com.github.ten0s.${BASE_NAME}"}"
