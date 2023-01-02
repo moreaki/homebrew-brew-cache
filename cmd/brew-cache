@@ -52,12 +52,14 @@ dump_info() {
     local cache_dir="${CACHE_DIR}"
     local cache_hash="$(current_hash)"
     local cache_file="$(cache_file "${cache_hash}")"
-    local cache_size=$(wc -l 2>/dev/null < "${cache_file}" | cut -d" " -f3)
+    local cache_size=$(wc -l 2>/dev/null < "${cache_file}" | tr -d " ")
+    local cache_pkgs=$(($(wc -l < <(brew list --formula --versions))))
 
     log_info "Cache dir : ${cache_dir}"
     log_info "Cache hash: ${cache_hash}"
     log_info "Cache file: ${cache_file:-"not available"}"
-    log_info "Cache size: ${cache_size:-0} entries"
+    log_info "Cache size: ${cache_size:-0} file lookup entries"
+    log_info "Cache pkgs: ${cache_pkgs:-0} packages managed"
 }
 
 latest_hash() {
